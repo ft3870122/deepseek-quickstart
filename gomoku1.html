@@ -1,0 +1,342 @@
+# 六子棋游戏 HTML 实现
+
+以下是一个完整的六子棋游戏 HTML 实现，所有代码都在一个文件中：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>六子棋游戏</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5dc;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #8b4513;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        
+        .board {
+            display: grid;
+            grid-template-columns: repeat(15, 40px);
+            grid-template-rows: repeat(15, 40px);
+            background-color: #deb887;
+            border: 2px solid #8b4513;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+        
+        .cell {
+            width: 40px;
+            height: 40px;
+            box-sizing: border-box;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .cell::before, .cell::after {
+            content: '';
+            position: absolute;
+            background-color: #000;
+        }
+        
+        .cell::before {
+            width: 100%;
+            height: 1px;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+        }
+        
+        .cell::after {
+            width: 1px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+        }
+        
+        .piece {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            top: 4px;
+            left: 4px;
+            z-index: 1;
+        }
+        
+        .black {
+            background: radial-gradient(circle at 30% 30%, #666, #000);
+            box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+        
+        .white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+            box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background-color: #8b4513;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #a0522d;
+        }
+        
+        .status {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #8b4513;
+            height: 24px;
+        }
+        
+        .star-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #000;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+        
+        .last-move {
+            box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <h1>六子棋游戏</h1>
+    <div class="game-container">
+        <div class="status" id="status">黑方回合</div>
+        <div class="board" id="board"></div>
+        <div class="controls">
+            <button id="restart">重新开始</button>
+            <button id="undo">悔棋</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const BOARD_SIZE = 15;
+            const boardElement = document.getElementById('board');
+            const statusElement = document.getElementById('status');
+            const restartButton = document.getElementById('restart');
+            const undoButton = document.getElementById('undo');
+            
+            let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+            let currentPlayer = 'black';
+            let gameOver = false;
+            let moveHistory = [];
+            
+            // 初始化棋盘
+            function initBoard() {
+                boardElement.innerHTML = '';
+                
+                // 创建星位
+                const starPoints = [
+                    [3, 3], [3, 11], [3, 7],
+                    [7, 3], [7, 11], [7, 7],
+                    [11, 3], [11, 11], [11, 7]
+                ];
+                
+                starPoints.forEach(([x, y]) => {
+                    const star = document.createElement('div');
+                    star.className = 'star-point';
+                    star.style.left = `${x * 40 + 20}px`;
+                    star.style.top = `${y * 40 + 20}px`;
+                    boardElement.appendChild(star);
+                });
+                
+                // 创建棋盘格子
+                for (let y = 0; y < BOARD_SIZE; y++) {
+                    for (let x = 0; x < BOARD_SIZE; x++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.x = x;
+                        cell.dataset.y = y;
+                        cell.addEventListener('click', () => handleCellClick(x, y));
+                        boardElement.appendChild(cell);
+                    }
+                }
+            }
+            
+            // 处理点击事件
+            function handleCellClick(x, y) {
+                if (gameOver || board[y][x] !== null) return;
+                
+                // 放置棋子
+                placePiece(x, y, currentPlayer);
+                
+                // 检查胜利条件
+                if (checkWin(x, y, currentPlayer)) {
+                    gameOver = true;
+                    statusElement.textContent = `${currentPlayer === 'black' ? '黑方' : '白方'}获胜！`;
+                    return;
+                }
+                
+                // 切换玩家
+                currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+                statusElement.textContent = `${currentPlayer === 'black' ? '黑方' : '白方'}回合`;
+            }
+            
+            // 放置棋子
+            function placePiece(x, y, player) {
+                board[y][x] = player;
+                moveHistory.push({x, y, player});
+                
+                const piece = document.createElement('div');
+                piece.className = `piece ${player}`;
+                piece.dataset.x = x;
+                piece.dataset.y = y;
+                
+                const cell = document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+                cell.appendChild(piece);
+                
+                // 标记最后一步
+                document.querySelectorAll('.piece').forEach(p => p.classList.remove('last-move'));
+                piece.classList.add('last-move');
+            }
+            
+            // 检查胜利条件（六子连珠）
+            function checkWin(x, y, player) {
+                const directions = [
+                    [1, 0],   // 水平
+                    [0, 1],    // 垂直
+                    [1, 1],    // 对角线
+                    [1, -1]    // 反对角线
+                ];
+                
+                for (const [dx, dy] of directions) {
+                    let count = 1;
+                    
+                    // 正向检查
+                    for (let i = 1; i < 6; i++) {
+                        const nx = x + i * dx;
+                        const ny = y + i * dy;
+                        if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === player) {
+                            count++;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    // 反向检查
+                    for (let i = 1; i < 6; i++) {
+                        const nx = x - i * dx;
+                        const ny = y - i * dy;
+                        if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && board[ny][nx] === player) {
+                            count++;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    if (count >= 6) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // 重新开始游戏
+            function restartGame() {
+                board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+                currentPlayer = 'black';
+                gameOver = false;
+                moveHistory = [];
+                statusElement.textContent = '黑方回合';
+                initBoard();
+            }
+            
+            // 悔棋
+            function undoMove() {
+                if (moveHistory.length === 0 || gameOver) return;
+                
+                const lastMove = moveHistory.pop();
+                board[lastMove.y][lastMove.x] = null;
+                
+                const piece = document.querySelector(`.piece[data-x="${lastMove.x}"][data-y="${lastMove.y}"]`);
+                if (piece) piece.remove();
+                
+                currentPlayer = lastMove.player;
+                statusElement.textContent = `${currentPlayer === 'black' ? '黑方' : '白方'}回合`;
+                
+                // 标记新的最后一步
+                if (moveHistory.length > 0) {
+                    const prevMove = moveHistory[moveHistory.length - 1];
+                    const prevPiece = document.querySelector(`.piece[data-x="${prevMove.x}"][data-y="${prevMove.y}"]`);
+                    if (prevPiece) prevPiece.classList.add('last-move');
+                }
+            }
+            
+            // 事件监听
+            restartButton.addEventListener('click', restartGame);
+            undoButton.addEventListener('click', undoMove);
+            
+            // 初始化游戏
+            initBoard();
+        });
+    </script>
+</body>
+</html>
+```
+
+## 游戏功能说明
+
+1. **基本规则**：
+   - 15×15 的棋盘
+   - 黑白双方轮流落子
+   - 先形成六子连珠的一方获胜（横、竖、斜方向均可）
+
+2. **游戏功能**：
+   - 显示当前回合玩家
+   - 显示获胜信息
+   - 重新开始游戏按钮
+   - 悔棋功能
+
+3. **界面特点**：
+   - 传统棋盘样式，包含星位标记
+   - 棋子有立体效果
+   - 最后一步落子有高亮标记
+   - 响应式设计
+
+## 使用方法
+
+1. 将上述代码复制到一个文本文件中
+2. 保存为 `.html` 后缀（例如 `six-in-a-row.html`）
+3. 用浏览器打开该文件即可开始游戏
+
+您可以根据需要调整棋盘大小、样式或规则，只需修改相应的 HTML、CSS 或 JavaScript 部分。
